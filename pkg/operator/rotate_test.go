@@ -187,13 +187,14 @@ func TestRotateSigningCA(t *testing.T) {
 		SerialGenerator: &crypto.RandomSerialGenerator{},
 		Config:          oldCAConfig,
 	}
+	oldServingCA := controller.NewServingCA(oldCA, nil, dnsSuffix)
 	oldBundlePEM, err := crypto.EncodeCertificates(oldCAConfig.Certs[0])
 	if err != nil {
 		t.Fatalf("error encoding old bundle to PEM: %v", err)
 	}
 
 	// Generate a service cert with the pre-rotation CA
-	oldServingCert, err := controller.MakeServingCert(dnsSuffix, oldCA, nil, objMeta)
+	oldServingCert, err := controller.MakeServiceServingCert(oldServingCA, objMeta)
 	if err != nil {
 		t.Fatalf("error generating serving cert from old ca: %v", err)
 	}
@@ -219,10 +220,11 @@ func TestRotateSigningCA(t *testing.T) {
 		SerialGenerator: &crypto.RandomSerialGenerator{},
 		Config:          newSigningCA.config,
 	}
+	newServingCA := controller.NewServingCA(newCA, newSigningCA.intermediateCACert, dnsSuffix)
 	newBundlePEM, err := crypto.EncodeCertificates(newSigningCA.bundle...)
 
 	// Generate a service cert with the post-rotation CA
-	newServingCert, err := controller.MakeServingCert(dnsSuffix, newCA, newSigningCA.intermediateCACert, objMeta)
+	newServingCert, err := controller.MakeServiceServingCert(newServingCA, objMeta)
 	if err != nil {
 		t.Fatalf("Error generating new service cert: %v", err)
 	}
