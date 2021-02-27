@@ -31,7 +31,7 @@ import (
 )
 
 const (
-	signerName            = "openshift-service-serving-signer"
+	serviceSignerName     = "openshift-service-serving-signer"
 	testServiceUID        = "some-uid"
 	testServiceName       = "svc-name"
 	testNamespace         = "svc-namespace"
@@ -61,7 +61,7 @@ Cryo2APfUHF0zOtxK0JifCnYi47H
 
 type secretModifier func(*corev1.Secret) *corev1.Secret
 
-func controllerSetup(t *testing.T, ca *crypto.CA, service *corev1.Service, secret *corev1.Secret) (*fake.Clientset, *serviceServingCertController) {
+func serviceServingCertControllerSetup(t *testing.T, ca *crypto.CA, service *corev1.Service, secret *corev1.Secret) (*fake.Clientset, *serviceServingCertController) {
 	clientObjects := []runtime.Object{} // objects to init the kubeclient with
 
 	svcIndexer := cache.NewIndexer(cache.MetaNamespaceKeyFunc, cache.Indexers{})
@@ -113,7 +113,7 @@ func TestServiceServingCertControllerSync(t *testing.T) {
 		path.Join(certDir, "service-signer.crt"),
 		path.Join(certDir, "service-signer.key"),
 		path.Join(certDir, "service-signer.serial"),
-		signerName,
+		serviceSignerName,
 		0,
 	)
 	if err != nil {
@@ -140,8 +140,8 @@ func TestServiceServingCertControllerSync(t *testing.T) {
 			},
 			expectedServiceAnnotations: map[string]string{
 				api.AlphaServingCertSecretAnnotation:    testSecretName,
-				api.AlphaServingCertCreatedByAnnotation: signerName,
-				api.ServingCertCreatedByAnnotation:      signerName,
+				api.AlphaServingCertCreatedByAnnotation: serviceSignerName,
+				api.ServingCertCreatedByAnnotation:      serviceSignerName,
 			},
 			expectedSecretAnnotations: map[string]string{
 				api.AlphaServiceUIDAnnotation:  testServiceUID,
@@ -157,8 +157,8 @@ func TestServiceServingCertControllerSync(t *testing.T) {
 			},
 			expectedServiceAnnotations: map[string]string{
 				api.ServingCertSecretAnnotation:         testSecretName,
-				api.AlphaServingCertCreatedByAnnotation: signerName,
-				api.ServingCertCreatedByAnnotation:      signerName,
+				api.AlphaServingCertCreatedByAnnotation: serviceSignerName,
+				api.ServingCertCreatedByAnnotation:      serviceSignerName,
 			},
 			expectedSecretAnnotations: map[string]string{
 				api.ServiceUIDAnnotation:  testServiceUID,
@@ -178,8 +178,8 @@ func TestServiceServingCertControllerSync(t *testing.T) {
 			},
 			expectedServiceAnnotations: map[string]string{
 				api.AlphaServingCertSecretAnnotation:    testSecretName,
-				api.AlphaServingCertCreatedByAnnotation: signerName,
-				api.ServingCertCreatedByAnnotation:      signerName,
+				api.AlphaServingCertCreatedByAnnotation: serviceSignerName,
+				api.ServingCertCreatedByAnnotation:      serviceSignerName,
 			},
 			expectedSecretAnnotations: map[string]string{
 				api.AlphaServiceUIDAnnotation:  testServiceUID,
@@ -199,8 +199,8 @@ func TestServiceServingCertControllerSync(t *testing.T) {
 			},
 			expectedServiceAnnotations: map[string]string{
 				api.ServingCertSecretAnnotation:         testSecretName,
-				api.AlphaServingCertCreatedByAnnotation: signerName,
-				api.ServingCertCreatedByAnnotation:      signerName,
+				api.AlphaServingCertCreatedByAnnotation: serviceSignerName,
+				api.ServingCertCreatedByAnnotation:      serviceSignerName,
 			},
 			expectedSecretAnnotations: map[string]string{
 				api.ServiceUIDAnnotation:  testServiceUID,
@@ -312,8 +312,8 @@ func TestServiceServingCertControllerSync(t *testing.T) {
 			secretData: []byte(testCertUnknownIssuer),
 			expectedServiceAnnotations: map[string]string{
 				api.ServingCertSecretAnnotation:         testSecretName,
-				api.AlphaServingCertCreatedByAnnotation: signerName,
-				api.ServingCertCreatedByAnnotation:      signerName,
+				api.AlphaServingCertCreatedByAnnotation: serviceSignerName,
+				api.ServingCertCreatedByAnnotation:      serviceSignerName,
 			},
 			expectedSecretAnnotations: map[string]string{
 				api.ServiceUIDAnnotation:  testServiceUID,
@@ -348,10 +348,10 @@ func TestServiceServingCertControllerSync(t *testing.T) {
 			var existingSecret *corev1.Secret
 			secretExists := tt.secretAnnotations != nil
 			if secretExists {
-				existingSecret = createTestSecret(tt.secretAnnotations, tt.secretData)
+				existingSecret = createTestServiceSecret(tt.secretAnnotations, tt.secretData)
 			}
 
-			kubeclient, controller := controllerSetup(t, ca, existingService, existingSecret)
+			kubeclient, controller := serviceServingCertControllerSetup(t, ca, existingService, existingSecret)
 			if secretExists {
 				// make the first secrets.Create fail with already exists because the kubeclient.CoreV1() derivate does not contain the actual object
 				kubeclient.PrependReactor("create", "secrets", func(action clientgotesting.Action) (handled bool, ret runtime.Object, err error) {
@@ -377,11 +377,11 @@ func TestServiceServingCertControllerSync(t *testing.T) {
 				switch {
 				case action.Matches("create", "secrets") && !secretExists:
 					newSecret := action.(clientgotesting.CreateAction).GetObject().(*corev1.Secret)
-					foundSecret = isExpectedSecret(t, newSecret, existingService, tt.expectedSecretAnnotations)
+					foundSecret = isExpectedServiceSecret(t, newSecret, existingService, tt.expectedSecretAnnotations)
 
 				case action.Matches("update", "secrets") && secretExists:
 					secret := action.(clientgotesting.UpdateAction).GetObject().(*corev1.Secret)
-					foundSecret = isExpectedSecret(t, secret, existingService, tt.expectedSecretAnnotations)
+					foundSecret = isExpectedServiceSecret(t, secret, existingService, tt.expectedSecretAnnotations)
 
 				case action.Matches("update", "services"):
 					service := action.(clientgotesting.UpdateAction).GetObject().(*corev1.Service)
@@ -419,7 +419,7 @@ func createTestSvc(annotations map[string]string) *corev1.Service {
 	}
 }
 
-func createTestSecret(annotations map[string]string, pemBundle []byte) *corev1.Secret {
+func createTestServiceSecret(annotations map[string]string, pemBundle []byte) *corev1.Secret {
 	s := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:        testSecretName,
@@ -435,7 +435,7 @@ func createTestSecret(annotations map[string]string, pemBundle []byte) *corev1.S
 	return s
 }
 
-func isExpectedSecret(t *testing.T, s *corev1.Secret, service *corev1.Service, expectedAnnotations map[string]string) bool {
+func isExpectedServiceSecret(t *testing.T, s *corev1.Secret, service *corev1.Service, expectedAnnotations map[string]string) bool {
 	if s.Name != testSecretName {
 		t.Errorf("expected %v, got %v", testSecretName, s.Name)
 		return false
@@ -452,11 +452,11 @@ func isExpectedSecret(t *testing.T, s *corev1.Secret, service *corev1.Service, e
 		return false
 	}
 
-	checkGeneratedCertificate(t, s.Data["tls.crt"], service)
+	checkGeneratedServiceCertificate(t, s.Data["tls.crt"], service)
 	return true
 }
 
-func checkGeneratedCertificate(t *testing.T, certData []byte, service *corev1.Service) {
+func checkGeneratedServiceCertificate(t *testing.T, certData []byte, service *corev1.Service) {
 	block, _ := pem.Decode(certData)
 	if block == nil {
 		t.Errorf("PEM block not found in secret")
